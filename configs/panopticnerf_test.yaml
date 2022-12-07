@@ -1,5 +1,6 @@
 task: panopticnerf
-gpus: [0, 1, 2, 3, 4, 5]
+# gpus: [0, 1, 2, 3, 4, 5]
+gpus: [0]
 exp_name: 'panopticnerf_test'
 
 ####

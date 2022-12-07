@@ -54,8 +54,9 @@ class Trainer(object):
         for iteration, batch in enumerate(data_loader):
             data_time = time.time() - end
             iteration = iteration + 1
-
-            batch = to_cuda(batch, self.device)
+            # 1张image中2048rays的属性，包括 
+            # 'rays', 'rays_rgb', 'intersection', 'intrinsics', 'pseudo_label', 'meta', 'stereo_num', 'depth', 'instance2id', 'id2instance', 'semantic2id', 'instance2semantic'
+            batch = to_cuda(batch, self.device) 
             self.add_iter_step(batch, epoch * max_iter + iteration)
             output, loss, loss_stats, image_stats = self.network(batch)
 

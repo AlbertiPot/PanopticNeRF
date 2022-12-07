@@ -9,6 +9,8 @@ import torch
 import torch.distributed as dist
 import os
 torch.autograd.set_detect_anomaly(True)
+import sys
+sys.path.append('/data2/gbc/workspace/nerf_explore/PanopticNeRF')
 
 if cfg.fix_random:
     torch.manual_seed(0)
@@ -21,8 +23,8 @@ def train(cfg, network):
     scheduler = make_lr_scheduler(cfg, optimizer)
     recorder = make_recorder(cfg)
     evaluator = make_evaluator(cfg)
-    load_network(network, cfg.trained_model_dir_init)
-    begin_epoch = load_model(network,
+    load_network(network, cfg.trained_model_dir_init)   # resume load weights 仅仅更新network的权重
+    begin_epoch = load_model(network,                   # 更细optimizer，scheduler等权重
                              optimizer,
                              scheduler,
                              recorder,

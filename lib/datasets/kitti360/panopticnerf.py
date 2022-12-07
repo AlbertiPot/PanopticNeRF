@@ -24,9 +24,9 @@ class Dataset:
         self.visible_id = os.path.join(data_root, 'visible_id', sequence)
         self.scene = scene
         # load image_ids
-        train_ids = np.arange(self.start, self.start + cfg.train_frames)
+        train_ids = np.arange(self.start, self.start + cfg.train_frames)    # 训练图像的id
         test_ids = np.arange(self.start, self.start + cfg.train_frames)
-        test_ids = np.array(cfg.val_list)
+        test_ids = np.array(cfg.val_list)   # test图像的id
         if split == 'train':
             self.image_ids = train_ids
         elif split == 'val':
@@ -34,30 +34,30 @@ class Dataset:
 
         # load intrinsics
         calib_dir = os.path.join(data_root, 'calibration')
-        self.intrinsic_file = os.path.join(calib_dir, 'perspective.txt')
+        self.intrinsic_file = os.path.join(calib_dir, 'perspective.txt')    # 相机内参
         self.load_intrinsic(self.intrinsic_file)
         self.H = int(self.height * cfg.ratio)
-        self.W = int(self.width  * cfg.ratio)
-        self.K_00[:2] = self.K_00[:2] * cfg.ratio
+        self.W = int(self.width  * cfg.ratio)   # 图像下采样0.5倍
+        self.K_00[:2] = self.K_00[:2] * cfg.ratio   # 3*4，第3行是0010，所以只用前两行乘以ratio
         self.K_01[:2] = self.K_01[:2] * cfg.ratio
-        self.intrinsic_00 = self.K_00[:, :-1]
+        self.intrinsic_00 = self.K_00[:, :-1]   # 取左上角3*3矩阵
         self.intrinsic_01 = self.K_01[:, :-1]
  
         # load cam2world poses
         self.cam2world_dict_00 = {}
         self.cam2world_dict_01 = {}
-        self.pose_file = os.path.join(data_root, 'data_poses', sequence, 'poses.txt')
-        poses = np.loadtxt(self.pose_file)
-        frames = poses[:, 0]
-        poses = np.reshape(poses[:, 1:], [-1, 3, 4])
-        fileCameraToPose = os.path.join(calib_dir, 'calib_cam_to_pose.txt')
-        self.camToPose = loadCalibrationCameraToPose(fileCameraToPose)['image_01']
-        for line in open(cam2world_root, 'r').readlines():
+        self.pose_file = os.path.join(data_root, 'data_poses', sequence, 'poses.txt')   # each line [frame_idx, 3*4车辆坐标系到世界坐标系的刚体（平移+旋转）变换矩阵]
+        poses = np.loadtxt(self.pose_file)  # 10514*13, 10514是全部帧的数量
+        frames = poses[:, 0]    # frames idex
+        poses = np.reshape(poses[:, 1:], [-1, 3, 4]) # 10514个 3*4外参矩阵
+        fileCameraToPose = os.path.join(calib_dir, 'calib_cam_to_pose.txt') # 相机到车辆坐标系
+        self.camToPose = loadCalibrationCameraToPose(fileCameraToPose)['image_01']  # 1号相机到车辆坐标系的映射
+        for line in open(cam2world_root, 'r').readlines():  
             value = list(map(float, line.strip().split(" ")))
-            self.cam2world_dict_00[value[0]] = np.array(value[1:]).reshape(4, 4)
+            self.cam2world_dict_00[value[0]] = np.array(value[1:]).reshape(4, 4)    # # 0号相机，所有帧从相机坐标系到世界坐标系的映射
         for frame, pose in zip(frames, poses):
             pose = np.concatenate((pose, np.array([0., 0., 0.,1.]).reshape(1, 4)))
-            self.cam2world_dict_01[frame] = np.matmul(np.matmul(pose, self.camToPose), np.linalg.inv(self.R_rect))
+            self.cam2world_dict_01[frame] = np.matmul(np.matmul(pose, self.camToPose), np.linalg.inv(self.R_rect)) # 1号相机，所有帧从相机坐标系到世界坐标系的映射 ，通过1号相机的内参等算得
         self.translation = np.array(cfg.center_pose)
 
         # load images
@@ -112,7 +112,7 @@ class Dataset:
             line = line.split(' ')
             if line[0] == 'P_rect_00:':
                 K = [float(x) for x in line[1:]]
-                K = np.reshape(K, [3, 4])
+                K = np.reshape(K, [3, 4])   # 3*4行投影矩阵
                 self.K_00 = K
             elif line[0] == 'P_rect_01:':
                 K = [float(x) for x in line[1:]]
@@ -121,8 +121,8 @@ class Dataset:
                 self.K_01 = K
             elif line[0] == 'R_rect_01:':
                 R_rect = np.eye(4)
-                R_rect[:3, :3] = np.array([float(x) for x in line[1:]]).reshape(3, 3)
-            elif line[0] == "S_rect_01:":
+                R_rect[:3, :3] = np.array([float(x) for x in line[1:]]).reshape(3, 3)   # 4*4旋转矩阵，右下角为1
+            elif line[0] == "S_rect_01:":   # resolution for 1号相机
                 width = int(float(line[1]))
                 height = int(float(line[2]))
         assert (intrinsic_loaded == True)
@@ -134,25 +134,25 @@ class Dataset:
         input_tuples = []
         for idx, frameId in enumerate(self.image_ids):
             pose = cam2world_dict_00[frameId]
-            pose[:3, 3] = pose[:3, 3] - self.translation
+            pose[:3, 3] = pose[:3, 3] - self.translation    # self.translation是sequence中心，不为0，给第4列平移量减去sequence中心坐标，等价于让sequence中心为0，所有点都围绕sequence中心
             image_path = images_list_00[frameId]
             intersection_path = intersection_dict_00[frameId]
             intersection = np.load(intersection_path)
             intersection_depths = intersection['arr_0'].reshape(-1, 10, 2).astype(np.float32)
             intersection_annotations = intersection['arr_1'].reshape(-1, 10, 2).astype(np.float32)
-            intersection = np.concatenate((intersection_depths, intersection_annotations), axis=2)
-            image = (np.array(imageio.imread(image_path)) / 255.).astype(np.float32)
+            intersection = np.concatenate((intersection_depths, intersection_annotations), axis=2)  # size(132352,10, 4]
+            image = (np.array(imageio.imread(image_path)) / 255.).astype(np.float32)    # (376, 1408, 3)
             image = cv2.resize(image, (self.W, self.H), interpolation=cv2.INTER_AREA)
-            rays = build_rays(self.intrinsic_00, pose, image.shape[0], image.shape[1])
-            rays_rgb = image.reshape(-1, 3)
+            rays = build_rays(self.intrinsic_00, pose, image.shape[0], image.shape[1])  # [H*W, 6]H*W个像素对应的每根ray的相机原点坐标+ray_d方向坐标
+            rays_rgb = image.reshape(-1, 3) # [H*W, 6]
             pseudo_label = cv2.imread(os.path.join(self.pseudo_root, self.scene,self.sequence[-9:-5]+'_{:010}.png'.format(frameId)), cv2.IMREAD_GRAYSCALE)
-            pseudo_label = cv2.resize(pseudo_label, (self.W, self.H), interpolation=cv2.INTER_NEAREST)
-            depth = np.loadtxt("datasets/KITTI-360/sgm/{}/depth_{:010}_0.txt".format(self.sequence, frameId))
+            pseudo_label = cv2.resize(pseudo_label, (self.W, self.H), interpolation=cv2.INTER_NEAREST)  #[188,704]
+            depth = np.loadtxt("datasets/KITTI-360/sgm/{}/depth_{:010}_0.txt".format(self.sequence, frameId))   # [376, 1408]
             depth = cv2.resize(depth, (self.W, self.H), interpolation=cv2.INTER_NEAREST)
             input_tuples.append((rays, rays_rgb, frameId, intersection, pseudo_label, self.intrinsic_00, 0, depth))
         print('load meta_00 done')
     
-        if cfg.use_stereo == True:
+        if cfg.use_stereo == True:  # 使用01号相机的图片
             for idx, frameId in enumerate(self.image_ids):
                 pose = cam2world_dict_01[frameId]
                 pose[:3, 3] = pose[:3, 3] - self.translation
@@ -164,7 +164,7 @@ class Dataset:
                 intersection = np.concatenate((intersection_depths, intersection_annotations), axis=2)
                 image = (np.array(imageio.imread(image_path)) / 255.).astype(np.float32)
                 image = cv2.resize(image, (self.W, self.H), interpolation=cv2.INTER_AREA)
-                rays = build_rays(self.intrinsic_00, pose, image.shape[0], image.shape[1])
+                rays = build_rays(self.intrinsic_00, pose, image.shape[0], image.shape[1])  # 00 和01相机的内参均相同
                 rays_rgb = image.reshape(-1, 3)
                 pseudo_label = np.zeros_like(pseudo_label)
                 image = cv2.resize(image, (self.W, self.H), interpolation=cv2.INTER_AREA)
@@ -175,10 +175,10 @@ class Dataset:
         self.metas = input_tuples
 
     def __getitem__(self, index):
-        rays, rays_rgb, frameId, intersection, pseudo_label, intrinsics, stereo_num, depth = self.metas[index]
+        rays, rays_rgb, frameId, intersection, pseudo_label, intrinsics, stereo_num, depth = self.metas[index]  # 取一张图片的全部光线
         if self.split == 'train':
-            rand_ids = np.random.permutation(len(rays))
-            rays = rays[rand_ids[:cfg.N_rays]]
+            rand_ids = np.random.permutation(len(rays)) # 取随机排序的rays的下标
+            rays = rays[rand_ids[:cfg.N_rays]]  # 从全部像素对应的光线中取采样 2048rays
             rays_rgb = rays_rgb[rand_ids[:cfg.N_rays]]
             intersection = intersection[rand_ids[:cfg.N_rays]]
             pseudo_label = pseudo_label.reshape(-1)[rand_ids[:cfg.N_rays]]

@@ -16,13 +16,13 @@ class Network(nn.Module):
     def __init__(self, down_ratio=2):
         super(Network, self).__init__()
         self.cascade = len(cfg.cascade_samples) > 1
-        self.nerf_0 = NeRF(fr_pos=cfg.fr_pos)
+        self.nerf_0 = NeRF(fr_pos=cfg.fr_pos)   # fr_pos = position的frequency
     
     def render_rays(self, rays, batch, intersection):
         B, N_rays, _, _ = intersection.shape
-        rays_o, rays_d = rays[:, :, :3], rays[:, :, 3:6]
-        scale_factor = torch.norm(rays_d, p=2, dim=2)
-        near_depth, far_depth = intersection[..., 0].to(rays), intersection[..., 1].to(rays)
+        rays_o, rays_d = rays[:, :, :3], rays[:, :, 3:6]    # 3维相机原点世界坐标，3维像素世界坐标
+        scale_factor = torch.norm(rays_d, p=2, dim=2)   # 每个rayd_d的三维坐标计算2范数 sqrt{x2+y2+z2}， 生成2048个归一化的
+        near_depth, far_depth = intersection[..., 0].to(rays), intersection[..., 1].to(rays)    # 和ray一样的device和dtype
         z_vals = sample_along_ray(near_depth, far_depth, cfg.bbox_sp)
         z_vals_bound = torch.cat([z_vals[...,0]-1e-5,z_vals[...,-1]+1e-5],dim=2)
         PDF = torch.ones(z_vals.shape)
@@ -138,7 +138,7 @@ class Network(nn.Module):
     def batchify_rays(self, rays, batch, intersection):
         all_ret = {}
         chunk = cfg.chunk_size
-        for i in range(0, rays.shape[1], chunk):
+        for i in range(0, rays.shape[1], chunk):    # chunk是step，一次渲染2048个光线
             ret = self.render_rays(rays[:,i:i+chunk], batch, intersection[:,i:i+chunk])
             torch.cuda.empty_cache()
             for k in ret:
@@ -150,5 +150,5 @@ class Network(nn.Module):
 
     def forward(self, batch):
         rays, rgbs, intersection = batch['rays'], batch['rays_rgb'], batch['intersection']
-        ret = self.batchify_rays(rays, batch, intersection)
+        ret = self.batchify_rays(rays, batch, intersection) # 在batchy_rays中渲染
         return ret

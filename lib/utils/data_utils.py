@@ -108,9 +108,12 @@ def to_cuda(batch, device=torch.device('cuda:'+str(cfg.local_rank))):
 
 def build_rays(ixt, c2w, H, W):
     X, Y = np.meshgrid(np.arange(W), np.arange(H))
-    XYZ = np.concatenate((X[:, :, None], Y[:, :, None], np.ones_like(X[:, :, None])), axis=-1)
-    XYZ = XYZ @ np.linalg.inv(ixt[:3, :3]).T
-    XYZ = XYZ @ c2w[:3, :3].T
-    rays_d = XYZ.reshape(-1, 3)
-    rays_o = c2w[:3, 3]
-    return np.concatenate((rays_o[None].repeat(len(rays_d), 0), rays_d), axis=-1) 
+    XYZ = np.concatenate((X[:, :, None], Y[:, :, None], np.ones_like(X[:, :, None])), axis=-1)  # [0,0,1], [1,0,1]，[201]先沿着W排列，再沿着H排列, Z轴是1
+    XYZ = XYZ @ np.linalg.inv(ixt[:3, :3]).T    # 新的XYZ是车辆坐标系的行向量 ix 内参,3*3矩阵 XYZ是188*704*3，取最后一维度是行向量 [0, 0, 1]，所以转置为需要转置： K矩阵乘{车辆坐标系列向量} = 图像坐标系列向量
+    XYZ = XYZ @ c2w[:3, :3].T # 新XYZ是世界坐标系的行向量， X世界.T = Xcam.T @ K.T
+    
+    # 图像像素点在世界坐标系的位置为该像素点对应的方向向量
+    # 相机外参的平移向量t为ray的光线原点
+    rays_d = XYZ.reshape(-1, 3) # [188,704,3] → [188*704,3] 共132352个行向量 位置， 
+    rays_o = c2w[:3, 3] #取外参最后一列的平移向量t（行向量）为坐标原点，相机在世界坐标系中相对于原点的偏移
+    return np.concatenate((rays_o[None].repeat(len(rays_d), 0), rays_d), axis=-1)   # 每一行是 ray_o的3个坐标+rayd的3个坐标，前三个坐标都是一样的，是该张图片对应相机的坐标

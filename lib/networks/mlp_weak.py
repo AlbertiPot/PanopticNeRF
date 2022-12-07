@@ -9,12 +9,12 @@ class NeRF(nn.Module):
         """
         super(NeRF, self).__init__()
         self.skips = skips
-        self.pe0, input_ch = get_embedder(fr_pos, 0)
-        self.pe1, input_ch_views = get_embedder(fr_view, 0)
+        self.pe0, input_ch = get_embedder(fr_pos, 0)    # position
+        self.pe1, input_ch_views = get_embedder(fr_view, 0) # view_direction fr_view= frequency of view
         self.pts_linears = nn.ModuleList(
             [nn.Linear(input_ch, W)] + \
             [nn.Linear(W, W) if i not in self.skips else \
-             nn.Linear(W + input_ch, W) for i in range(D-1)])
+             nn.Linear(W + input_ch, W) for i in range(D-1)])   # 第self.skips层mlp多加入了原始输入
 
         self.alpha_linear = nn.Linear(W, 1)
         self.feature_linear = nn.Linear(W, W)
@@ -72,7 +72,7 @@ class NeRF(nn.Module):
 
         outputs = torch.cat([rgb, alpha, semantic], -1)
         return outputs.reshape(B, N_rays, N_samples, 4+50)
-
+# 位置编码
 class Embedder:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
