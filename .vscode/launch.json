@@ -11,17 +11,23 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "justMyCode": true,
+            // for train
             "args":[
                 "--cfg_file", "./configs/panopticnerf_test.yaml",
                 "pretrain", "nerf",
-                "gpus", "0,",
                 "use_stereo", "True",
                 "use_pspnet", "True",
                 "use_depth", "True",
                 "pseudo_filter", "True",
                 "weight_th", "0.05",
                 "resume", "False"
-            ]
+            ],
+            // for run
+            // "args":[
+            //     "--cfg_file", "./configs/panopticnerf_test.yaml",
+            //     "--type", "visualize",
+            //     "use_stereo", "False"
+            // ],
         }
     ]
 }

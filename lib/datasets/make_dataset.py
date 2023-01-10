@@ -84,7 +84,7 @@ def make_data_loader(cfg, is_train=True, is_distributed=False, max_iter=-1):
         drop_last = False
     
     dataset_name = cfg.train.dataset if is_train else cfg.test.dataset
-    dataset = make_dataset(cfg, is_train)   # 总数据量128，包括00和01摄像机
+    dataset = make_dataset(cfg, is_train)   # 每个序列64张图一个摄像机，总数据量128，包括00和01摄像机
     
     # if is_train == False and cfg.test.val_dataset != '':
     #     val_dataset = make_dataset(cfg, cfg.test.val_dataset, is_train, True)

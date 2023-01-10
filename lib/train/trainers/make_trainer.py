@@ -9,4 +9,4 @@ def _wrapper_factory(cfg, network):
 
 def make_trainer(cfg, network):
     network = _wrapper_factory(cfg, network)
-    return Trainer(network) # train val iter
+    return Trainer(network) # train val iter    # wrapper之后再送给trainer初始化

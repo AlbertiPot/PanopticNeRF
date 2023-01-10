@@ -109,8 +109,8 @@ def to_cuda(batch, device=torch.device('cuda:'+str(cfg.local_rank))):
 def build_rays(ixt, c2w, H, W):
     X, Y = np.meshgrid(np.arange(W), np.arange(H))
     XYZ = np.concatenate((X[:, :, None], Y[:, :, None], np.ones_like(X[:, :, None])), axis=-1)  # [0,0,1], [1,0,1]，[201]先沿着W排列，再沿着H排列, Z轴是1
-    XYZ = XYZ @ np.linalg.inv(ixt[:3, :3]).T    # 新的XYZ是车辆坐标系的行向量 ix 内参,3*3矩阵 XYZ是188*704*3，取最后一维度是行向量 [0, 0, 1]，所以转置为需要转置： K矩阵乘{车辆坐标系列向量} = 图像坐标系列向量
-    XYZ = XYZ @ c2w[:3, :3].T # 新XYZ是世界坐标系的行向量， X世界.T = Xcam.T @ K.T
+    XYZ = XYZ @ np.linalg.inv(ixt[:3, :3]).T    # 新的XYZ是车辆坐标系的行向量 ix 内参,3*3矩阵 XYZ是188*704*3，取最后一维度是行向量 [0, 0, 1]，所以需要转置： K矩阵乘{车辆坐标系向量} = 图像坐标系列向量
+    XYZ = XYZ @ c2w[:3, :3].T # 新XYZ是世界坐标系的行向量， X世界.T = Xcam.T @ R.T
     
     # 图像像素点在世界坐标系的位置为该像素点对应的方向向量
     # 相机外参的平移向量t为ray的光线原点

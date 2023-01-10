@@ -10,7 +10,6 @@ import torch.distributed as dist
 import os
 torch.autograd.set_detect_anomaly(True)
 import sys
-sys.path.append('/data2/gbc/workspace/nerf_explore/PanopticNeRF')
 
 if cfg.fix_random:
     torch.manual_seed(0)

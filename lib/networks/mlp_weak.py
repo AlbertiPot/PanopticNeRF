@@ -1,10 +1,11 @@
+import enum
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lib.config import cfg
 
 class NeRF(nn.Module):
-    def __init__(self, D=8, W=256, fr_pos=10, fr_view=4, skips=[4]):
+    def __init__(self, D=8, W=256, fr_pos=10, fr_view=4, skips=[4], classes=3):
         """
         """
         super(NeRF, self).__init__()
@@ -17,9 +18,28 @@ class NeRF(nn.Module):
              nn.Linear(W + input_ch, W) for i in range(D-1)])   # 第self.skips层mlp多加入了原始输入
 
         self.alpha_linear = nn.Linear(W, 1)
+        
+        self.cls_linears = nn.ModuleList([
+            nn.Linear(W, W),
+            nn.Linear(W, W//2)])
+        self.cls_linear = nn.Linear(W//2, classes)
+
+        self.dimension_linears = nn.ModuleList([
+            nn.Linear(W, W),
+            nn.Linear(W, W//2)])
+        self.dimension_linear = nn.Linear(W//2, 3)  # delta_h, delta_w, delta_l
+
         self.feature_linear = nn.Linear(W, W)
         self.rgb_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W//2)])
         self.rgb_linear = nn.Linear(W//2, 3)
+
+        self.local_angel_linears = nn.ModuleList([
+            nn.Linear(input_ch_views + W, W),
+            nn.Linear(W, W//2)])
+        self.local_angel_linear = nn.Linear(W//2, 2)  # sina cosa
+
+        self.depth_linears = nn.ModuleList([nn.Linear(input_ch_views + W, W//2)])
+        self.depth_linear = nn.Linear(W//2, 1)
 
         self.semantic_linears_num = 4
         self.semantic_linears = nn.ModuleList(
@@ -27,6 +47,14 @@ class NeRF(nn.Module):
         self.semantic_output1 = nn.Linear(W, W//2)
         self.semantic_output2 = nn.Linear(W//2, 50)
 
+        self.cls_linears.apply(weights_init)
+        self.cls_linear.apply(weights_init)
+        self.dimension_linears.apply(weights_init)
+        self.dimension_linear.apply(weights_init)
+        self.local_angel_linears.apply(weights_init)
+        self.local_angel_linear.apply(weights_init)
+        self.depth_linears.apply(weights_init)
+        self.depth_linear.apply(weights_init)
         self.rgb_linears.apply(weights_init)
         self.semantic_output1.apply(weights_init)
         self.semantic_output2.apply(weights_init)
@@ -38,10 +66,10 @@ class NeRF(nn.Module):
 
     def forward(self, xyz, ray_dir):
         B, N_rays, N_samples = xyz.shape[:3]
-        xyz, ray_dir = xyz.reshape(-1, 3), ray_dir.reshape(-1, 3)
+        xyz, ray_dir = xyz.reshape(-1, 3), ray_dir.reshape(-1, 3)   # [1*2048*148,3]
         ray_dir = ray_dir / ray_dir.norm(dim=-1, keepdim=True)
 
-        input_pts, input_views = self.pe0(xyz), self.pe1(ray_dir)
+        input_pts, input_views = self.pe0(xyz), self.pe1(ray_dir) #[,,, , 93], [,,, , 27]
         h = input_pts
         for i, l in enumerate(self.pts_linears):
             h = self.pts_linears[i](h)
@@ -50,7 +78,24 @@ class NeRF(nn.Module):
                 h = torch.cat([input_pts, h], -1)
 
         # alpha
-        alpha = self.alpha_linear(h)
+        alpha = self.alpha_linear(h)    # torch.Size([303104, 1])
+
+        # clss_predict
+        cls_feature = h
+        for i, l in enumerate(self.cls_linears):
+            cls_feature = self.cls_linears[i](cls_feature)
+            cls_feature = F.relu(cls_feature)
+        cls_logit = self.cls_linear(cls_feature)
+        cls_logit = torch.sigmoid(cls_logit)
+        cls_logit = cls_logit.clamp(min=1e-4, max=1 - 1e-4) # torch.Size([303104, 3]) classes = 3
+
+        dimension_feature = h
+        for i, l in enumerate(self.dimension_linears):
+            dimension_feature = self.dimension_linears[i](dimension_feature)
+            dimension_feature = F.relu(dimension_feature)
+        dimension_logits = self.dimension_linear(dimension_feature)
+        dimension_logits = torch.sigmoid(dimension_logits) - 0.5    # l,h,w
+
         feature = self.feature_linear(h)
 
         # semantic
@@ -61,17 +106,33 @@ class NeRF(nn.Module):
         semantic = self.semantic_output2(F.relu(semantic))
         if self.training == False:
             m = nn.Softmax(dim=1)
-            semantic = m(semantic)
+            semantic = m(semantic)      # torch.Size([303104, 50])
 
         # rgb
-        h = torch.cat([feature, input_views], -1)
+        h = torch.cat([feature, input_views], -1)   # 256+27
+
+        local_angel_feature = h
+        for i, l in enumerate(self.local_angel_linears):
+            local_angel_feature = self.local_angel_linears[i](local_angel_feature)
+            local_angel_feature = F.relu(local_angel_feature)
+        local_angel_logits = self.local_angel_linear(local_angel_feature)
+        local_angel_logits = F.normalize(local_angel_logits)
+
+        depth_feature = h
+        for i, l in enumerate(self.depth_linears):
+            depth_feature = self.depth_linears[i](depth_feature)
+            depth_feature = F.relu(depth_feature)
+        depth_offset = self.depth_linear(depth_feature)
+        # add camera external parameters to make depth prediction aware of global position
+
         for i, l in enumerate(self.rgb_linears):
             h = self.rgb_linears[i](h)
             h = F.relu(h)
-        rgb = self.rgb_linear(h)  
+        rgb = self.rgb_linear(h)    #torch.Size([303104, 3])
 
         outputs = torch.cat([rgb, alpha, semantic], -1)
-        return outputs.reshape(B, N_rays, N_samples, 4+50)
+        box3d_outputs = torch.cat([dimension_logits, local_angel_logits, cls_logit], -1)
+        return outputs.reshape(B, N_rays, N_samples, -1), box3d_outputs.reshape(B, N_rays, N_samples, -1)
 # 位置编码
 class Embedder:
     def __init__(self, **kwargs):
