@@ -1,6 +1,6 @@
 task: panopticnerf
 gpus: [0]
-exp_name: 'panopticnerf_rad0.75_del0.1'
+exp_name: 'panopticnerf_rad0.75_del0'
 
 ####
 src_views_num: 3
@@ -98,7 +98,7 @@ save_latest_ep: 1
 log_interval: 1
 
 target_rad: 0.75
-target_delta: 0.1
+target_delta: 0.0
 
 # only for test
 max_detection : 30
